@@ -9,6 +9,7 @@ use crate::types::{MessageRequest, MessageResponse};
 
 pub mod anthropic;
 pub mod openai_compat;
+pub mod vertex;
 
 #[allow(dead_code)]
 pub type ProviderFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, ApiError>> + Send + 'a>>;
@@ -31,6 +32,7 @@ pub trait Provider {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProviderKind {
     Anthropic,
+    VertexAnthropic,
     Xai,
     OpenAi,
 }
@@ -147,6 +149,7 @@ pub fn resolve_model_alias(model: &str) -> String {
                     "haiku" => "claude-haiku-4-5-20251213",
                     _ => trimmed,
                 },
+                ProviderKind::VertexAnthropic => trimmed,
                 ProviderKind::Xai => match *alias {
                     "grok" | "grok-3" => "grok-3",
                     "grok-mini" | "grok-3-mini" => "grok-3-mini",
@@ -165,6 +168,14 @@ pub fn resolve_model_alias(model: &str) -> String {
 #[must_use]
 pub fn metadata_for_model(model: &str) -> Option<ProviderMetadata> {
     let canonical = resolve_model_alias(model);
+    if vertex::is_vertex_model(model) {
+        return Some(ProviderMetadata {
+            provider: ProviderKind::VertexAnthropic,
+            auth_env: "GOOGLE_ACCESS_TOKEN",
+            base_url_env: "ANTHROPIC_VERTEX_LOCATION",
+            default_base_url: "https://LOCATION-aiplatform.googleapis.com",
+        });
+    }
     if canonical.starts_with("claude") {
         return Some(ProviderMetadata {
             provider: ProviderKind::Anthropic,

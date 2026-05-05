@@ -1599,6 +1599,7 @@ fn resolve_repl_model(cli_model: String) -> String {
 fn provider_label(kind: ProviderKind) -> &'static str {
     match kind {
         ProviderKind::Anthropic => "anthropic",
+        ProviderKind::VertexAnthropic => "vertex-anthropic",
         ProviderKind::Xai => "xai",
         ProviderKind::OpenAi => "openai",
     }
@@ -7695,6 +7696,9 @@ impl AnthropicRuntimeClient {
                     .with_base_url(api::read_base_url())
                     .with_prompt_cache(PromptCache::new(session_id));
                 ApiProviderClient::Anthropic(inner)
+            }
+            ProviderKind::VertexAnthropic => {
+                ApiProviderClient::from_model_with_anthropic_auth(&resolved_model, None)?
             }
             ProviderKind::Xai | ProviderKind::OpenAi => {
                 // The api crate's `ProviderClient::from_model_with_anthropic_auth`
