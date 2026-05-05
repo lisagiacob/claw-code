@@ -248,12 +248,24 @@ pub fn vertex_body_with_profile(
             "request body must serialize to a JSON object",
         ))
     })?;
+    strip_vertex_unsupported_body_fields(object);
     object.remove("model");
     object.insert(
         "anthropic_version".to_string(),
         Value::String(DEFAULT_VERTEX_ANTHROPIC_VERSION.to_string()),
     );
     Ok(body)
+}
+
+fn strip_vertex_unsupported_body_fields(object: &mut serde_json::Map<String, Value>) {
+    object.remove("betas");
+    object.remove("frequency_penalty");
+    object.remove("presence_penalty");
+    if let Some(stop_val) = object.remove("stop") {
+        if stop_val.as_array().is_some_and(|values| !values.is_empty()) {
+            object.insert("stop_sequences".to_string(), stop_val);
+        }
+    }
 }
 
 fn read_required_env(name: &'static str) -> Result<String, ApiError> {
@@ -386,5 +398,34 @@ mod tests {
         );
         assert!(body.get("model").is_none());
         assert_eq!(body.get("max_tokens"), Some(&json!(100)));
+    }
+
+    #[test]
+    fn vertex_body_strips_fields_rejected_by_vertex_anthropic() {
+        let request = MessageRequest {
+            model: "google-vertex-anthropic/sonnet".to_string(),
+            max_tokens: 100,
+            messages: vec![InputMessage::user_text("hello")],
+            frequency_penalty: Some(0.5),
+            presence_penalty: Some(0.3),
+            stop: Some(vec!["\n".to_string()]),
+            ..MessageRequest::default()
+        };
+        let profile = AnthropicRequestProfile::default();
+        let rendered = profile
+            .render_json_body(&request)
+            .expect("profile should render");
+        assert!(
+            rendered.get("betas").is_some(),
+            "default Anthropic profile emits betas before provider filtering"
+        );
+
+        let body = vertex_body_with_profile(&request, &profile).expect("body should render");
+
+        assert!(body.get("betas").is_none());
+        assert!(body.get("frequency_penalty").is_none());
+        assert!(body.get("presence_penalty").is_none());
+        assert!(body.get("stop").is_none());
+        assert_eq!(body.get("stop_sequences"), Some(&json!(["\n"])));
     }
 }
