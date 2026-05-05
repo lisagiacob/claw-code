@@ -218,9 +218,19 @@ pub fn vertex_endpoint(project_id: &str, location: &str, model: &str, streaming:
     } else {
         "rawPredict"
     };
+    let base_url = vertex_base_url(location);
     format!(
-        "https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model}:{suffix}"
+        "{base_url}/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model}:{suffix}"
     )
+}
+
+#[must_use]
+pub fn vertex_base_url(location: &str) -> String {
+    match location {
+        "global" => "https://aiplatform.googleapis.com".to_string(),
+        "us" | "eu" => format!("https://aiplatform.{location}.rep.googleapis.com"),
+        _ => format!("https://{location}-aiplatform.googleapis.com"),
+    }
 }
 
 pub fn vertex_body_with_profile(
@@ -319,8 +329,8 @@ mod tests {
     use telemetry::AnthropicRequestProfile;
 
     use super::{
-        is_vertex_model, normalize_vertex_model_id, vertex_body_with_profile, vertex_endpoint,
-        DEFAULT_VERTEX_ANTHROPIC_VERSION,
+        is_vertex_model, normalize_vertex_model_id, vertex_base_url, vertex_body_with_profile,
+        vertex_endpoint, DEFAULT_VERTEX_ANTHROPIC_VERSION,
     };
     use crate::types::{InputMessage, MessageRequest};
 
@@ -341,11 +351,22 @@ mod tests {
     fn vertex_endpoint_uses_model_in_url() {
         assert_eq!(
             vertex_endpoint("p1", "global", "claude-sonnet-4-6", true),
-            "https://global-aiplatform.googleapis.com/v1/projects/p1/locations/global/publishers/anthropic/models/claude-sonnet-4-6:streamRawPredict"
+            "https://aiplatform.googleapis.com/v1/projects/p1/locations/global/publishers/anthropic/models/claude-sonnet-4-6:streamRawPredict"
         );
         assert_eq!(
             vertex_endpoint("p1", "us-east5", "claude-sonnet-4-6", false),
             "https://us-east5-aiplatform.googleapis.com/v1/projects/p1/locations/us-east5/publishers/anthropic/models/claude-sonnet-4-6:rawPredict"
+        );
+    }
+
+    #[test]
+    fn vertex_base_url_handles_global_multi_region_and_regional_locations() {
+        assert_eq!(vertex_base_url("global"), "https://aiplatform.googleapis.com");
+        assert_eq!(vertex_base_url("us"), "https://aiplatform.us.rep.googleapis.com");
+        assert_eq!(vertex_base_url("eu"), "https://aiplatform.eu.rep.googleapis.com");
+        assert_eq!(
+            vertex_base_url("us-east5"),
+            "https://us-east5-aiplatform.googleapis.com"
         );
     }
 
